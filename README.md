@@ -1,160 +1,249 @@
 # Relay State
 
-**A reusable TypeScript global state manager for Electron with synchronous authoritative operations and reactive React hooks.**
+**Synchronous state for Electron. Reactive hooks for React.**
 
 [![CI](https://github.com/5675413-starfish-industries-5675413/relay-state/actions/workflows/ci.yml/badge.svg)](https://github.com/5675413-starfish-industries-5675413/relay-state/actions/workflows/ci.yml)
 
-Relay uses one authoritative main-process reducer. Main calls it directly. Renderer code calls `dispatch()` and `getState()` synchronously through a restricted Electron preload bridge. React renders from a revisioned local cache, using asynchronous notifications for updates made elsewhere.
+Relay State is a reusable TypeScript global state manager for Electron. A single authoritative store lives in the **main process**, while renderer processes perform synchronous reads and dispatches through a restricted IPC bridge.
 
-> **Important:** The synchronous transport uses Electron `ipcRenderer.sendSync`. It blocks the calling renderer until main replies. It is intentionally chosen to demonstrate a literal synchronous cross-process contract, **not recommended as a default for all Electron apps**. Use Relay only for bounded state and infrequent operations; never call authoritative operations during React rendering or high-frequency event loops.
+React components consume a revisioned local cache through a reusable hook.
 
-## Contents
+The repository includes **Relay Tasks**, a functional two-window desktop application demonstrating the library beyond a simple counter example.
 
-- **`packages/relay-state`** — framework-independent core, Electron adapter, renderer store and React hook
-- **`apps/relay-tasks`** — functional desktop task workspace, compact companion and native menu updates
-- **`tests/consumer`** — unrelated preferences-domain consumer installed from a packed library archive
-- **`docs`** — detailed architecture, consistency, integration, verification and reviewer demonstration
+> **Note:** Relay intentionally uses Electron's synchronous IPC (`sendSync`). It blocks the renderer until main responds. This is suitable for demonstrating a strict synchronous contract with small, infrequent operations—not as a general replacement for asynchronous IPC.
 
-## Review the reusable implementation
+## Features
 
-The public API—not the demo app—is the deliverable. Start with the [main store](packages/relay-state/src/core/create-main-store.ts), [Electron main adapter](packages/relay-state/src/electron/main/attach-electron-store.ts), [restricted preload bridge](packages/relay-state/src/electron/preload/create-sync-bridge.ts), [renderer store](packages/relay-state/src/renderer/create-renderer-store.ts), and [React hook](packages/relay-state/src/react/create-store-hooks.ts). Then open [Relay Tasks](apps/relay-tasks): two genuinely functioning windows plus native-menu mutations that consume the library.
+- **Authoritative state** — One main-process store with validated actions and immutable snapshots.
+- **Synchronous operations** — Reads and dispatches return main-generated results and revisions.
+- **React hooks** — Subscribe to cached state with `useStoreState(selector)`.
+- **Multi-window synchronization** — Asynchronous broadcasts propagate updates; stale revisions are rejected.
+- **Restricted IPC** — Sandboxed preload, fixed bridge methods, and application-defined sender authorization.
+- **Reusable package** — Separate exports for the core, Electron adapters, renderer store, and React integration.
 
-**Verified baseline:** commit [`076b1ba`](https://github.com/5675413-starfish-industries-5675413/relay-state/commit/076b1ba) passed GitHub Actions (23 unit tests, 7 built-Electron E2E tests, typecheck, lint, build, and independent packaged React/TypeScript consumers). The machine-specific manual demo, latency measurements and dependency triage are separate final checks—not claims already established by CI.
+## Getting Started
 
-## Quick start
-
-Prerequisite: Node.js 24 and a platform supported by Electron. Dependencies are installed from the committed lockfile.
+Requires Node.js 24 and an Electron-supported desktop operating system.
 
 ```bash
-npm ci                  # install exactly the locked dependency graph
-npm run dev             # builds the library and launches Relay Tasks
-npm run build           # production bundles (not an installer)
-npm run typecheck
-npm test
-npm run test:consumer
-npm run test:e2e        # Linux desktop requires DISPLAY; e.g. xvfb-run
-npm run benchmark:ipc   # built app, real sync IPC round trips; saves local JSON
-npm run audit:report    # read-only npm advisory reports; does not modify dependencies
+git clone https://github.com/5675413-starfish-industries-5675413/relay-state.git
+cd relay-state
+npm ci
+npm run dev
 ```
 
-The committed `package-lock.json` is used by CI with `npm ci`. `@relay-state/store` is a provisional workspace package name; npm publication requires verifying name and scope ownership.
+To run the built application instead:
 
-## Application
+```bash
+npm run build
+npm run preview -w @relay-state/tasks
+```
 
-Workspace: add, complete, delete and filter tasks. Companion: quick capture and completion. Native **Tasks → Add example task** calls the main store directly. Both renderers share the same authority; no component imports `ipcRenderer`.
+### Try Relay Tasks
 
-The workspace Diagnostics panel offers an authoritative read and a synchronous dispatch/read check. The companion has a manual authoritative refresh for testing stale caches. All state is deliberately reset when the application restarts; persistence is not included in v0.1.
+1. Add a task in **Workspace** and watch it appear in **Companion**.
+2. Complete it in Companion and observe Workspace update.
+3. Choose **Tasks → Add example task** from the native application menu.
+4. Use **Sync dispatch check** in Workspace Diagnostics to verify an immediate authoritative read after a committed dispatch.
+5. Close and reopen Companion to recover the latest state from main.
 
-**Manual demo:** after `npm run build`, launch the built desktop app with `npm run preview -w @relay-state/tasks`. Add in Workspace, complete in Companion, use macOS **Tasks → Add example task** (main-originated dispatch), then run both Diagnostics controls. The [final reviewer checklist](docs/final-review.md) gives the full 2–3 minute walkthrough, benchmarking procedure, and dependency audit triage.
+State is intentionally held in memory and resets when the application restarts.
 
-## Library integration (minimal)
+[Full demonstration guide](docs/final-review.md)
 
-**Main process**
+## Architecture
+
+```text
+                   ELECTRON MAIN PROCESS
+                 ┌───────────────────────┐
+                 │    createMainStore    │
+                 │                       │
+                 │  Validate → Reduce    │
+                 │  Commit → Revision    │
+                 └───────────┬───────────┘
+                             │
+             Synchronous IPC │ Asynchronous broadcasts
+                             │
+                 ┌───────────▼───────────┐
+                 │   Restricted Preload  │
+                 │       IPC Bridge      │
+                 └───────────┬───────────┘
+                             │
+                 ┌───────────▼───────────┐
+                 │  createRendererStore  │
+                 │    Revisioned Cache   │
+                 └───────────┬───────────┘
+                             │
+                    useStoreState()
+                             │
+                         React UI
+```
+
+**Important distinction:** Authoritative reads and dispatches are synchronous. Rendering updates in other windows arrive asynchronously.
+
+## Usage
+
+### 1. Create the main-process store
 
 ```ts
 import { createMainStore } from '@relay-state/store/core';
-import { attachElectronStore } from '@relay-state/store/electron/main';
 
-const store = createMainStore({
+type State = { count: number };
+type Action = { type: 'increment' };
+
+const store = createMainStore<State, Action>({
   initialState: { count: 0 },
-  parseAction: (value: unknown) => {
-    if (!value || typeof value !== 'object' || !('type' in value) || value.type !== 'increment')
-      throw new TypeError('Invalid action');
-    return { type: 'increment' as const };
-  },
-  reducer: (state, action) => action.type === 'increment'
-    ? { count: state.count + 1 } : state,
-});
 
-const detach = attachElectronStore({
-  namespace: 'my-app', store,
-  authorize: (event) => isApprovedMainFrame(event),
-  getRecipients: () => approvedWebContents(),
+  parseAction(input: unknown) {
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      !('type' in input) ||
+      input.type !== 'increment'
+    ) {
+      throw new TypeError('Invalid action');
+    }
+
+    return { type: 'increment' };
+  },
+
+  reducer: (state) => ({
+    count: state.count + 1,
+  }),
 });
 ```
 
-`isApprovedMainFrame` and `approvedWebContents` are application-defined policies; Relay intentionally has no permissive default. See `apps/relay-tasks/src/main/security.ts` for the actual demo policy.
+### 2. Connect Electron
 
-**Preload**
+In the main process, attach the store using `attachElectronStore()` from `@relay-state/store/electron/main`.
+
+The host application must supply `authorize` and `getRecipients` policies for approved windows and frames.
+
+In preload, expose the restricted bridge:
 
 ```ts
 import { contextBridge } from 'electron';
 import { createSyncBridge } from '@relay-state/store/electron/preload';
-contextBridge.exposeInMainWorld('relayState', createSyncBridge('my-app'));
+
+contextBridge.exposeInMainWorld(
+  'relayState',
+  createSyncBridge('counter')
+);
 ```
 
-**Renderer**
+The namespace must match the one used by the main-process adapter.
 
-```ts
+### 3. Connect React
+
+```tsx
 import { createRendererStore } from '@relay-state/store/renderer';
 import { createStoreHooks } from '@relay-state/store/react';
 
-const store = createRendererStore({ bridge: window.relayState });
-store.initialize(); // synchronous authoritative read; call before mounting React
-const { useStoreState } = createStoreHooks(store);
+// State and Action are shared application types.
+// window.relayState is the typed preload bridge.
+const rendererStore = createRendererStore<State, Action>({
+  bridge: window.relayState,
+});
+
+rendererStore.initialize();
+
+const { useStoreState } = createStoreHooks(rendererStore);
 
 function Counter() {
-  const count = useStoreState(state => state.count); // cached, nonblocking React read
-  return <button onClick={() => store.dispatch({ type: 'increment' })}>{count}</button>;
+  const count = useStoreState((state) => state.count);
+
+  return (
+    <button onClick={() => rendererStore.dispatch({ type: 'increment' })}>
+      {count}
+    </button>
+  );
 }
 ```
 
-For the exact typed implementation, consult Relay Tasks and `docs/integration.md`.
+Initialize the renderer store before mounting React. The hook reads cached state; synchronous IPC is reserved for explicit store operations.
 
-## Precise consistency guarantee
+See [Integration](docs/integration.md) for complete setup details and [Relay Tasks](apps/relay-tasks/src) for the working implementation.
 
-| Operation | Guarantee |
-|---|---|
-| Main `getState()` | Synchronous authoritative read |
-| Main `dispatch(action)` | Synchronous validated commit/no-op or rejection |
-| Renderer `getState()` | Synchronous main read; accepts response into renderer revision gate |
-| Renderer `dispatch(action)` | Blocks until main acknowledges committed/no-op revision or rejects |
-| Renderer `getCachedSnapshot()` | Nonblocking local read; may lag main |
-| `useStoreState(selector)` | Local cached state with reactive notifications |
-| Other windows | Receive broadcasts asynchronously; may render later |
-| Conflicting writes | Last committed action wins according to actual main commit order |
-| Restart | State resets; no persistence guarantee |
+## API Reference
 
-A transport/process failure after main commits can leave the result unknown to the caller. Never automatically retry an uncertain write. Main waiting indefinitely can freeze the calling renderer; an in-renderer JavaScript timeout cannot safely cancel `sendSync`.
+| API | Responsibility |
+| --- | --- |
+| `createMainStore()` | Validates actions, owns authoritative state, commits revisions |
+| `attachElectronStore()` | Registers authorized synchronous IPC handlers and broadcasts |
+| `createSyncBridge()` | Provides fixed preload read, dispatch, and subscription methods |
+| `createRendererStore()` | Exposes synchronous operations and a revisioned renderer cache |
+| `createStoreHooks()` | Creates the reactive `useStoreState(selector)` hook |
 
-## Repository quality gates
+### Consistency guarantees
 
-1. Core validation, reducer behavior, owned immutable state, no-op and revision tests.
-2. Renderer initialization, stale snapshot, sync reply and notification reentrancy tests.
-3. Real Electron two-window test and test-only main process observation.
-4. A controlled synchronous-operation barrier released by the *independent test controller* (not the blocked main event loop).
-5. Production preload with `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`.
-6. Independent `npm pack` consumer with an unrelated state domain.
+- `getState()` in a renderer performs a synchronous authoritative read.
+- `dispatch(action)` blocks until main acknowledges the commit, no-op, or rejection.
+- `getCachedSnapshot()` and React hooks read local cached state without blocking IPC.
+- Main commits are revisioned, and older broadcast snapshots cannot overwrite newer cache revisions.
+- A failed transport can leave a write's outcome uncertain; such writes should not be retried automatically.
 
-See `docs/verification.md` for the exact automated gates and `docs/final-review.md` for the remaining manual, measured-performance, and security-audit evidence. The current verified implementation is commit `076b1ba` (23 unit tests, 7 Electron E2E tests, full typecheck/lint/build, and external package consumers). Results from the new benchmark and npm audit are intentionally **not** invented in this README.
+[Detailed consistency contract](docs/consistency.md)
 
-## Design constraints and limitations
+## Testing
 
-- Supported state is plain JSON-compatible data: finite numbers, strings, booleans, null, dense arrays and plain objects; strict limits apply.
-- Store owns a validated, deep-frozen copy of initial and committed state.
-- Same-state reference returned from reducer is a no-op; new reference increments revision.
-- Subscribers are synchronous, short, nonblocking; they must never wait for renderer replies.
-- Renderer subscribers may read the cache, but must not issue nested blocking read/refresh/dispatch operations.
-- Full snapshots are used rather than patches. No persistence, CRDT, remote collaboration, automatic retries or optimistic writes.
-- This design demonstrates synchronous *authoritative operations*, **not** simultaneous cross-window UI rendering or globally shared memory.
+The implementation has passed local macOS verification and Linux GitHub Actions.
+
+| Verification | Result |
+| --- | --- |
+| Unit tests | **23 passed** |
+| Electron end-to-end tests | **7 passed** |
+| TypeScript typecheck and ESLint | **Passed** |
+| Production build | **Passed** |
+| Independent package, React, and TypeScript consumers | **Passed** |
+| GitHub Actions | [**Passing run**](https://github.com/5675413-starfish-industries-5675413/relay-state/actions/runs/42773282465) |
+
+Run the suite:
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run build
+npm run test:consumer
+npm run test:e2e
+```
+
+Additional tools:
+
+```bash
+npm run benchmark:ipc
+npm run audit:report
+```
+
+The IPC benchmark measures real synchronous calls using the built Electron application. The dependency audit currently identifies eight development-dependency findings, documented separately rather than automatically force-upgraded.
+
+## Limitations
+
+- Synchronous IPC blocks the renderer and should not be used for high-frequency or expensive operations.
+- State is bounded, plain-data, immutable, and stored only in memory.
+- Cross-window rendering is asynchronous, not simultaneous.
+- Persistence, distributed collaboration, optimistic updates, and automatic recovery of uncertain writes are outside this implementation.
+- Host applications must provide their own strict IPC sender authorization.
+- `@relay-state/store` is currently a local workspace package, not a published npm package.
+
+## Project Structure
+
+```text
+packages/relay-state/   Reusable TypeScript state management library
+apps/relay-tasks/       Functional two-window Electron application
+tests/consumer/         Independent packaged-library consumers
+scripts/                Benchmark and dependency audit
+docs/                   Architecture, integration, and verification
+```
 
 ## Documentation
 
-[Architecture](docs/architecture.md) · [Consistency](docs/consistency.md) · [Integration](docs/integration.md) · [Verification](docs/verification.md) · [Security](SECURITY.md) · [Final review](docs/final-review.md)
+[Architecture](docs/architecture.md) · [Integration](docs/integration.md) · [Consistency](docs/consistency.md) · [Verification](docs/verification.md) · [Security](SECURITY.md)
+
+## Contributing
+
+Contributions are welcome. Review [CONTRIBUTING.md](CONTRIBUTING.md), preserve the synchronous consistency contract and security boundaries, and run the verification suite before opening a pull request.
 
 ## License
 
-MIT, subject to confirming the repository owner's preferred attribution. This repository is an implementation and demonstration, not a published npm package or installer. The reproducible CI workflow is the source of current verification status.
-
-## Verification beyond a counter demo
-
-`Relay Tasks` is an actual consuming application with a full workspace, a compact
-companion, native-menu task creation, two-way completion, diagnostics, and explicit
-synchronous authoritative reads. The core manager and the React hook are exported
-from the standalone library; application components do not call Electron IPC.
-
-The verification suite specifically checks **main commits before dispatch returns**,
-not just a local optimistic update. The hardening tests add an explicit
-main-entered signal to the independent barrier, sender-policy negative tests,
-window reload/reopen tests, and an npm-packed external React/TypeScript consumer.
-See [Verification](docs/verification.md) for the precise coverage and exclusions.
+MIT — see [LICENSE](LICENSE).
