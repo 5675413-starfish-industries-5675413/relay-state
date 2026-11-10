@@ -2,6 +2,8 @@
 
 **A reusable TypeScript global state manager for Electron with synchronous authoritative operations and reactive React hooks.**
 
+[![CI](https://github.com/5675413-starfish-industries-5675413/relay-state/actions/workflows/ci.yml/badge.svg)](https://github.com/5675413-starfish-industries-5675413/relay-state/actions/workflows/ci.yml)
+
 Relay uses one authoritative main-process reducer. Main calls it directly. Renderer code calls `dispatch()` and `getState()` synchronously through a restricted Electron preload bridge. React renders from a revisioned local cache, using asynchronous notifications for updates made elsewhere.
 
 > **Important:** The synchronous transport uses Electron `ipcRenderer.sendSync`. It blocks the calling renderer until main replies. It is intentionally chosen to demonstrate a literal synchronous cross-process contract, **not recommended as a default for all Electron apps**. Use Relay only for bounded state and infrequent operations; never call authoritative operations during React rendering or high-frequency event loops.
@@ -15,10 +17,10 @@ Relay uses one authoritative main-process reducer. Main calls it directly. Rende
 
 ## Quick start
 
-Prerequisite: Node.js 24 and a platform supported by Electron. This checkout is a source scaffold; dependencies are not included.
+Prerequisite: Node.js 24 and a platform supported by Electron. Dependencies are installed from the committed lockfile.
 
 ```bash
-npm install             # generates package-lock.json on the first install
+npm ci                  # install exactly the locked dependency graph
 npm run dev             # builds the library and launches Relay Tasks
 npm run build           # production bundles (not an installer)
 npm run typecheck
@@ -27,7 +29,7 @@ npm run test:consumer
 npm run test:e2e        # Linux desktop requires DISPLAY; e.g. xvfb-run
 ```
 
-Commit `package-lock.json` after the first successful install and change CI to `npm ci`. `@relay-state/store` is a provisional workspace package name; npm publication requires verifying name and scope ownership.
+The committed `package-lock.json` is used by CI with `npm ci`. `@relay-state/store` is a provisional workspace package name; npm publication requires verifying name and scope ownership.
 
 ## Application
 
@@ -114,7 +116,7 @@ A transport/process failure after main commits can leave the result unknown to t
 5. Production preload with `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`.
 6. Independent `npm pack` consumer with an unrelated state domain.
 
-See `docs/verification.md` for exact commands and remaining manual checks. The presence of these files is **not a claim of passing tests**: test results and recording should be added only after execution.
+See `docs/verification.md` for exact commands and remaining manual checks. The project passed its initial macOS and Linux CI suites at commit `db577e4` (18 unit tests, 4 Electron E2E tests). Hardening changes must pass CI before being described as verified; see the workflow for the current status.
 
 ## Design constraints and limitations
 
@@ -132,4 +134,17 @@ See `docs/verification.md` for exact commands and remaining manual checks. The p
 
 ## License
 
-MIT, subject to confirming the repository owner's preferred attribution. This scaffold is not a published npm release or a verified submission.
+MIT, subject to confirming the repository owner's preferred attribution. This repository is an implementation and demonstration, not a published npm package or installer. The reproducible CI workflow is the source of current verification status.
+
+## Verification beyond a counter demo
+
+`Relay Tasks` is an actual consuming application with a full workspace, a compact
+companion, native-menu task creation, two-way completion, diagnostics, and explicit
+synchronous authoritative reads. The core manager and the React hook are exported
+from the standalone library; application components do not call Electron IPC.
+
+The verification suite specifically checks **main commits before dispatch returns**,
+not just a local optimistic update. The hardening tests add an explicit
+main-entered signal to the independent barrier, sender-policy negative tests,
+window reload/reopen tests, and an npm-packed external React/TypeScript consumer.
+See [Verification](docs/verification.md) for the precise coverage and exclusions.

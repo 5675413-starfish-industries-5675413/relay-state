@@ -23,3 +23,15 @@ Any **authorized** renderer can read the entire shared snapshot and initiate act
 ## Reporting
 
 For vulnerabilities in a published fork, use that repository's private security advisory/reporting channel. Do not post exploitable details in a public issue.
+
+## Hardening verification
+
+The registered-window authorization policy is tested against forged/unregistered
+senders, subframes, origin/path changes and destroyed windows. Electron E2E also
+attempts real synchronous IPC from an unregistered same-origin BrowserWindow.
+These tests deliberately do not add any authorization bypass to the library.
+The independent barrier is enabled only when `RELAY_E2E=1` **and** `app.isPackaged` is false, matches the unique
+barrier test action, and is released by a separate Playwright process. The
+`__relayE2E` inspection hook exists in Electron main **only** in explicit
+unpackaged test mode; it is never exposed through preload or the renderer API. Do not set this
+flag in released applications.

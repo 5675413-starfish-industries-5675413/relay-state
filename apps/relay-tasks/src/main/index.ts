@@ -58,7 +58,7 @@ async function main(): Promise<void> {
   });
 
   // Explicit test-mode inspection is only in main and never exposed via contextBridge.
-  if (process.env.RELAY_E2E === '1') {
+  if (process.env.RELAY_E2E === '1' && !app.isPackaged) {
     (globalThis as typeof globalThis & { __relayE2E?: unknown }).__relayE2E = {
       getSnapshot: () => taskStore.getSnapshot(),
       dispatch: (action: unknown) => taskStore.dispatch(action as Parameters<typeof taskStore.dispatch>[0]),

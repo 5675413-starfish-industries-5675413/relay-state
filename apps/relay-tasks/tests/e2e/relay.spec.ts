@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { _electron as electron } from 'playwright';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -77,6 +77,7 @@ test('synchronous authoritative read catches up while broadcasts are withheld', 
 test('synchronous dispatch cannot return before main releases an independent barrier', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'relay-e2e-'));
   const gate = join(dir, 'release');
+  const entered = `${gate}.entered`;
   const { electronApp, workspace } = await launch({ RELAY_E2E_GATE_FILE: gate });
   try {
     let returned = false;
@@ -85,8 +86,9 @@ test('synchronous dispatch cannot return before main releases an independent bar
         completed: false, createdAt: 100 },
     }));
     void pending.then(() => { returned = true; });
-    // The timer lives in the separate Playwright controller, not blocked Electron main.
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 200));
+    // An independent controller must observe main entering the handler first.
+    // This prevents a delayed/unscheduled request from producing a false pass.
+    await expect.poll(() => existsSync(entered), { timeout: 5_000 }).toBe(true);
     expect(returned).toBe(false);
     writeFileSync(gate, 'go');
     const answer = await pending;
@@ -110,5 +112,108 @@ test('invalid actions return a structured rejection without committing', async (
     if (!result.ok) expect(result.error.code).toBe('INVALID_ACTION');
     const after = await mainSnapshot(electronApp);
     expect(after.revision).toBe(before.revision);
+  } finally { await electronApp.close(); }
+});
+
+
+test('an unregistered window cannot read or write even at the approved app origin', async () => {
+  const { electronApp } = await launch();
+  try {
+    // Real production-bundled preload and IPC, but not registered in openWindows.
+    const probe = await electronApp.evaluate(async ({ BrowserWindow, app }) => {
+      const window = new BrowserWindow({
+        show: false,
+        webPreferences: {
+          preload: `${app.getAppPath()}/out/preload/index.cjs`,
+          sandbox: true, contextIsolation: true, nodeIntegration: false,
+        },
+      });
+      try {
+        await window.loadURL('relayapp://app/#workspace');
+        return await window.webContents.executeJavaScript(`({
+          bridge: typeof window.relayState,
+          nodeRequire: typeof window.require,
+          read: window.relayState.readSync(),
+          write: window.relayState.dispatchSync({ type: 'invalid' }),
+        })`);
+      } finally {
+        window.destroy();
+      }
+    });
+    expect(probe.bridge).toBe('object');
+    expect(probe.nodeRequire).toBe('undefined');
+    expect(probe.read).toMatchObject({ ok: false, error: { code: 'FORBIDDEN' } });
+    expect(probe.write).toMatchObject({ ok: false, error: { code: 'FORBIDDEN' } });
+    expect((await mainSnapshot(electronApp)).revision).toBe(0);
+  } finally { await electronApp.close(); }
+});
+
+test('window reload and companion close/reopen recover the current main snapshot', async () => {
+  const { electronApp, workspace, companion } = await launch();
+  try {
+    await workspace.getByPlaceholder('What needs to get done?').fill('Survives renderer replacement');
+    await workspace.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(companion.getByText('Survives renderer replacement')).toBeVisible();
+
+    await companion.reload();
+    await expect(companion.getByText('Survives renderer replacement')).toBeVisible();
+    await companion.close();
+    await expect.poll(() => electronApp.windows().length).toBe(1);
+
+    // Invoke the existing native menu command, not a test-only mutation shortcut.
+    await electronApp.evaluate(({ Menu, BrowserWindow }) => {
+      const menu = Menu.getApplicationMenu();
+      const openItem = menu?.items.find((item) => item.label === 'Tasks')
+        ?.submenu?.items.find((item) => item.label === 'Open companion');
+      if (!openItem?.click) throw new Error('Missing native Open companion action');
+      openItem.click(openItem, BrowserWindow.getFocusedWindow()!, undefined as never);
+    });
+    await expect.poll(() => electronApp.windows().length).toBe(2);
+    const reopened = electronApp.windows().find((page) => page !== workspace);
+    if (!reopened) throw new Error('Companion failed to reopen');
+    await expect(reopened.getByText('Survives renderer replacement')).toBeVisible();
+    expect((await mainSnapshot(electronApp)).revision).toBe(1);
+  } finally { await electronApp.close(); }
+});
+
+test('navigation away from the trusted origin is blocked', async () => {
+  const { electronApp, workspace } = await launch();
+  try {
+    const trustedUrl = workspace.url();
+    // The app registered its will-navigate prevention listener when the window
+    // was created. Our observer runs after it and checks that it took effect.
+    await electronApp.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows().find((candidate) =>
+        candidate.webContents.getURL().endsWith('#workspace'));
+      if (!win) throw new Error('Workspace not found');
+      const probe = globalThis as typeof globalThis & {
+        __relayNavigationAttempt?: { url: string; prevented: boolean };
+      };
+      delete probe.__relayNavigationAttempt;
+      win.webContents.once('will-navigate', (event) => {
+        probe.__relayNavigationAttempt = {
+          url: event.url,
+          prevented: event.defaultPrevented,
+        };
+      });
+    });
+
+    await workspace.evaluate(() => { window.location.assign('https://example.com/relay-escape'); });
+    await expect.poll(() => electronApp.evaluate(() =>
+      (globalThis as typeof globalThis & {
+        __relayNavigationAttempt?: { url: string; prevented: boolean };
+      }).__relayNavigationAttempt,
+    )).toEqual({ url: 'https://example.com/relay-escape', prevented: true });
+
+    // Inspect Electron's authoritative URL instead of a Playwright locator:
+    // Playwright can continue waiting for the attempted navigation to settle
+    // even when Electron has already canceled it.
+    const currentUrl = await electronApp.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows().find((candidate) =>
+        candidate.webContents.getURL().endsWith('#workspace'));
+      if (!win) throw new Error('Workspace left its trusted origin');
+      return win.webContents.getURL();
+    });
+    expect(currentUrl).toBe(trustedUrl);
   } finally { await electronApp.close(); }
 });
