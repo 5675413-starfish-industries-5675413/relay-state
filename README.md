@@ -13,7 +13,13 @@ Relay uses one authoritative main-process reducer. Main calls it directly. Rende
 - **`packages/relay-state`** — framework-independent core, Electron adapter, renderer store and React hook
 - **`apps/relay-tasks`** — functional desktop task workspace, compact companion and native menu updates
 - **`tests/consumer`** — unrelated preferences-domain consumer installed from a packed library archive
-- **`docs`** — detailed architecture, consistency, integration and verification
+- **`docs`** — detailed architecture, consistency, integration, verification and reviewer demonstration
+
+## Review the reusable implementation
+
+The public API—not the demo app—is the deliverable. Start with the [main store](packages/relay-state/src/core/create-main-store.ts), [Electron main adapter](packages/relay-state/src/electron/main/attach-electron-store.ts), [restricted preload bridge](packages/relay-state/src/electron/preload/create-sync-bridge.ts), [renderer store](packages/relay-state/src/renderer/create-renderer-store.ts), and [React hook](packages/relay-state/src/react/create-store-hooks.ts). Then open [Relay Tasks](apps/relay-tasks): two genuinely functioning windows plus native-menu mutations that consume the library.
+
+**Verified baseline:** commit [`076b1ba`](https://github.com/5675413-starfish-industries-5675413/relay-state/commit/076b1ba) passed GitHub Actions (23 unit tests, 7 built-Electron E2E tests, typecheck, lint, build, and independent packaged React/TypeScript consumers). The machine-specific manual demo, latency measurements and dependency triage are separate final checks—not claims already established by CI.
 
 ## Quick start
 
@@ -27,6 +33,8 @@ npm run typecheck
 npm test
 npm run test:consumer
 npm run test:e2e        # Linux desktop requires DISPLAY; e.g. xvfb-run
+npm run benchmark:ipc   # built app, real sync IPC round trips; saves local JSON
+npm run audit:report    # read-only npm advisory reports; does not modify dependencies
 ```
 
 The committed `package-lock.json` is used by CI with `npm ci`. `@relay-state/store` is a provisional workspace package name; npm publication requires verifying name and scope ownership.
@@ -36,6 +44,8 @@ The committed `package-lock.json` is used by CI with `npm ci`. `@relay-state/sto
 Workspace: add, complete, delete and filter tasks. Companion: quick capture and completion. Native **Tasks → Add example task** calls the main store directly. Both renderers share the same authority; no component imports `ipcRenderer`.
 
 The workspace Diagnostics panel offers an authoritative read and a synchronous dispatch/read check. The companion has a manual authoritative refresh for testing stale caches. All state is deliberately reset when the application restarts; persistence is not included in v0.1.
+
+**Manual demo:** after `npm run build`, launch the built desktop app with `npm run preview -w @relay-state/tasks`. Add in Workspace, complete in Companion, use macOS **Tasks → Add example task** (main-originated dispatch), then run both Diagnostics controls. The [final reviewer checklist](docs/final-review.md) gives the full 2–3 minute walkthrough, benchmarking procedure, and dependency audit triage.
 
 ## Library integration (minimal)
 
@@ -116,7 +126,7 @@ A transport/process failure after main commits can leave the result unknown to t
 5. Production preload with `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`.
 6. Independent `npm pack` consumer with an unrelated state domain.
 
-See `docs/verification.md` for exact commands and remaining manual checks. The project passed its initial macOS and Linux CI suites at commit `db577e4` (18 unit tests, 4 Electron E2E tests). Hardening changes must pass CI before being described as verified; see the workflow for the current status.
+See `docs/verification.md` for the exact automated gates and `docs/final-review.md` for the remaining manual, measured-performance, and security-audit evidence. The current verified implementation is commit `076b1ba` (23 unit tests, 7 Electron E2E tests, full typecheck/lint/build, and external package consumers). Results from the new benchmark and npm audit are intentionally **not** invented in this README.
 
 ## Design constraints and limitations
 
@@ -130,7 +140,7 @@ See `docs/verification.md` for exact commands and remaining manual checks. The p
 
 ## Documentation
 
-[Architecture](docs/architecture.md) · [Consistency](docs/consistency.md) · [Integration](docs/integration.md) · [Verification](docs/verification.md) · [Security](SECURITY.md)
+[Architecture](docs/architecture.md) · [Consistency](docs/consistency.md) · [Integration](docs/integration.md) · [Verification](docs/verification.md) · [Security](SECURITY.md) · [Final review](docs/final-review.md)
 
 ## License
 

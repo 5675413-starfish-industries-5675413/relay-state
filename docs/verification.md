@@ -5,7 +5,7 @@ No test result is claimed merely because the test source is present. Run these o
 ## Commands
 
 ```bash
-npm install
+npm ci
 npm run build:lib
 npm run typecheck
 npm test
@@ -32,8 +32,8 @@ For dev: `npm run dev`. For built app: `npm run preview -w @relay-state/tasks`.
 | Synchronous dispatch truly waits for main | E2E independent file barrier + code inspection |
 | Main revision originates from actual commit | E2E main-process test hook |
 | Invalid writes do not commit | Unit + E2E |
-| Window close/reload | Manual + expand E2E |
-| Sender authorization including untrusted frame | Manual + expand E2E negative tests |
+| Window close/reload | E2E + manual demo |
+| Sender authorization including untrusted frame | Unit + E2E |
 | Sandboxed built preload works | E2E built app |
 | Independent consumer | `npm run test:consumer` |
 
@@ -60,7 +60,7 @@ Playwright's Electron support remains experimental. Run the built app on the int
 
 ## Before publication
 
-Confirm npm package scope ownership; generate and commit `package-lock.json`; switch CI installation to `npm ci`; run tests; verify Electron build/preload names and production security policy; resolve all failures; attach a screen recording; tag v0.1.0 only after this succeeds. Do not claim compliance with an external evaluator's undisclosed rubric.
+Confirm npm package scope ownership before publication; keep `package-lock.json` committed and CI on `npm ci`; run tests; verify the production Electron app manually; collect actual IPC latency samples and triage npm advisories; attach a screen recording; tag a release only when final checks succeed. Do not claim compliance with an external evaluator's undisclosed rubric.
 
 ## Verified baseline and post-baseline hardening
 
@@ -69,7 +69,7 @@ The first fully green milestone is commit `db577e4` (macOS and GitHub Actions on
 This is a historical baseline, not a prediction of the status of later changes.
 Consult the CI badge and latest GitHub Actions run for current pass/fail evidence.
 
-The follow-up hardening suite adds these gates, **subject to CI passing**:
+The follow-up hardening suite, verified at commit `076b1ba` on macOS and GitHub Actions Linux CI, adds these gates:
 
 - A two-file synchronous barrier: the independent Playwright controller observes
   `release.entered` from Electron main before asserting that the renderer IPC call
@@ -93,3 +93,7 @@ also has its own 10-second limit. Never release a blocked main handler through
 Install using `npm ci` from the committed `package-lock.json`.
 CI uses `npm ci --no-audit --no-fund`; dependency audit findings are tracked
 separately and do not justify blind breaking upgrades.
+
+## Final manual evidence
+
+Run the real built-app walkthrough, IPC microbenchmark and audit triage described in [Final review](final-review.md). Automated integration results do not substitute for actual measured latency or a dependency risk assessment.

@@ -19,7 +19,9 @@
     "test:e2e": "npm run build && npm run test:e2e -w @relay-state/tasks",
     "test:consumer": "npm run build:lib && node scripts/verify-pack.mjs",
     "lint": "eslint .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "benchmark:ipc": "npm run build && node scripts/benchmark-ipc.mjs",
+    "audit:report": "node scripts/audit-deps.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.38.0",
