@@ -1,0 +1,30 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      # Once package-lock.json is generated and committed, replace with npm ci.
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Verify packed consumer
+        run: npm run test:consumer
+      - name: Electron system libraries
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgtk-3-0 libnss3 libasound2t64 libatk-bridge2.0-0 libgbm1
+      - name: Electron integration tests
+        run: xvfb-run -a npm run test:e2e -w @relay-state/tasks

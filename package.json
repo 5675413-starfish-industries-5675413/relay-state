@@ -1,0 +1,33 @@
+{
+  "name": "relay-state-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build:lib": "npm run build -w @relay-state/store",
+    "dev": "npm run build:lib && npm run dev -w @relay-state/tasks",
+    "build": "npm run build:lib && npm run build -w @relay-state/tasks",
+    "typecheck": "npm run build:lib && npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm run build && npm run test:e2e -w @relay-state/tasks",
+    "test:consumer": "npm run build:lib && node scripts/verify-pack.mjs",
+    "lint": "eslint .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.38.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^9.38.0",
+    "prettier": "^3.6.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.46.0",
+    "globals": "^16.4.0"
+  }
+}

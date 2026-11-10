@@ -1,0 +1,30 @@
+{
+  "name": "@relay-state/store",
+  "version": "0.1.0",
+  "description": "Main-authoritative synchronous state management for Electron",
+  "type": "module",
+  "license": "MIT",
+  "files": ["dist", "README.md", "LICENSE"],
+  "sideEffects": false,
+  "exports": {
+    "./core": { "types": "./dist/core/index.d.ts", "default": "./dist/core/index.js" },
+    "./electron/main": { "types": "./dist/electron/main/index.d.ts", "default": "./dist/electron/main/index.js" },
+    "./electron/preload": { "types": "./dist/electron/preload/index.d.ts", "default": "./dist/electron/preload/index.js" },
+    "./renderer": { "types": "./dist/renderer/index.d.ts", "default": "./dist/renderer/index.js" },
+    "./react": { "types": "./dist/react/index.d.ts", "default": "./dist/react/index.js" }
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": { "electron": ">=30", "react": ">=18" },
+  "peerDependenciesMeta": { "electron": { "optional": true }, "react": { "optional": true } },
+  "devDependencies": {
+    "@types/react": "^19.2.16",
+    "electron": "45.2.3",
+    "react": "^19.2.7",
+    "tsup": "^8.5.1",
+    "vitest": "^4.1.8"
+  }
+}
