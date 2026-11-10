@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createRendererStore } from '../src/renderer';
 import { fail, ok } from '../src/core';
-import type { StateBridge, Snapshot } from '../src/renderer';
+import type { StateBridge } from '../src/renderer';
+import type { Snapshot } from '../src/core';
 
 type State = { count: number };
 type Action = { type: 'increment' };

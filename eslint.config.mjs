@@ -11,7 +11,8 @@ export default tseslint.config(
     files: ['packages/relay-state/src/core/**/*.{ts,tsx}', 'packages/relay-state/src/renderer/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': ['error', {
-        patterns: ['electron', 'react', 'react-dom', 'node:*', '@relay-state/tasks/**']
+        paths: ['electron', 'react', 'react-dom'],
+        patterns: ['node:*', '@relay-state/tasks/**']
       }]
     }
   }

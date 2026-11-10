@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ElectronApplication, Page } from 'playwright';
+import type { ElectronApplication } from 'playwright';
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -51,7 +51,7 @@ test('workspace, companion and main all share one authoritative store', async ()
     const snapshot = await mainSnapshot(electronApp);
     expect(snapshot.state.tasks.some((task) => task.title === 'Review the actual manager')).toBe(true);
     expect(snapshot.revision).toBeGreaterThan(0);
-    await companion.getByRole('checkbox').first().check();
+    await companion.getByRole('checkbox').first().click();
     await expect(workspace.getByText('Active 0')).toBeVisible();
   } finally { await electronApp.close(); }
 });

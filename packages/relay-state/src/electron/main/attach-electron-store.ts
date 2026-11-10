@@ -2,7 +2,7 @@ import { ipcMain } from 'electron';
 import type { IpcMainEvent, WebContents } from 'electron';
 import { RelayError } from '../../core/errors';
 import { fail, ok } from '../../core/types';
-import type { MainStore, Result, Snapshot } from '../../core/types';
+import type { MainStore, Result, Snapshot, RelayErrorCode } from '../../core/types';
 import { channelsFor } from '../protocol';
 
 export interface AttachElectronStoreOptions<S, A> {
@@ -14,6 +14,20 @@ export interface AttachElectronStoreOptions<S, A> {
 }
 
 const occupied = new Set<string>();
+
+// Public entry points can contain distinct RelayError constructors.
+const relayCodes: ReadonlySet<string> = new Set([
+  'INVALID_ACTION', 'INVALID_STATE', 'FORBIDDEN', 'REDUCER_FAILED',
+  'REENTRANT', 'NOT_READY', 'DISPOSED', 'PROTOCOL_ERROR', 'TRANSPORT_ERROR',
+]);
+
+function isRelayFailure(error: unknown): error is Error & { code: RelayErrorCode } {
+  return error instanceof Error &&
+    error.name === 'RelayError' &&
+    'code' in error &&
+    typeof error.code === 'string' &&
+    relayCodes.has(error.code);
+}
 
 /** The application supplies the trusted-window and origin policy. Never allow-all by default. */
 export function attachElectronStore<S, A>(options: AttachElectronStoreOptions<S, A>): () => void {
@@ -39,7 +53,7 @@ export function attachElectronStore<S, A>(options: AttachElectronStoreOptions<S,
         ? ok(execute())
         : fail('FORBIDDEN', 'This frame is not authorized to use Relay State');
     } catch (error) {
-      if (error instanceof RelayError) {
+      if (isRelayFailure(error)) {
         result = fail(error.code, error.message);
       } else {
         report(error);
